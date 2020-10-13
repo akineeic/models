@@ -33,8 +33,10 @@ import os
 from scipy import misc
 import sys
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
+os.system('pip install tf_slim')
+import tf_slim as slim
 import utils
+import moxing as mox
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -45,9 +47,13 @@ tf.app.flags.DEFINE_string(
     "Input folder containing images")
 tf.app.flags.DEFINE_string("model_dir", None, "Estimator model_dir")
 tf.app.flags.DEFINE_string(
-    "dset",
+    "data_url",
     "",
     "Path to the directory containing the dataset.")
+tf.app.flags.DEFINE_string(
+    "local_data_path",
+    "/cache/data/",
+    "Path to cache dataset.")
 tf.app.flags.DEFINE_integer("steps", 200000, "Training steps")
 tf.app.flags.DEFINE_integer("batch_size", 8, "Size of mini-batch.")
 tf.app.flags.DEFINE_string(
@@ -80,17 +86,17 @@ def create_input_fn(split, batch_size):
     IOError: If test.txt or dev.txt are not found.
   """
 
-  if (not os.path.exists(os.path.join(FLAGS.dset, "test.txt")) or
-      not os.path.exists(os.path.join(FLAGS.dset, "dev.txt"))):
+  if (not os.path.exists(os.path.join(FLAGS.local_data_path, "test.txt")) or
+      not os.path.exists(os.path.join(FLAGS.local_data_path, "dev.txt"))):
     raise IOError("test.txt or dev.txt not found")
 
-  with open(os.path.join(FLAGS.dset, "test.txt"), "r") as f:
+  with open(os.path.join(FLAGS.local_data_path, "test.txt"), "r") as f:
     testset = [x.strip() for x in f.readlines()]
 
-  with open(os.path.join(FLAGS.dset, "dev.txt"), "r") as f:
+  with open(os.path.join(FLAGS.local_data_path, "dev.txt"), "r") as f:
     validset = [x.strip() for x in f.readlines()]
 
-  files = os.listdir(FLAGS.dset)
+  files = os.listdir(FLAGS.local_data_path)
   filenames = []
   for f in files:
     sp = os.path.splitext(f)
@@ -99,7 +105,7 @@ def create_input_fn(split, batch_size):
 
     if ((split == "validation" and sp[0] in validset) or
         (split == "train" and sp[0] not in validset)):
-      filenames.append(os.path.join(FLAGS.dset, f))
+      filenames.append(os.path.join(FLAGS.local_data_path, f))
 
   def input_fn():
     """input_fn for tf.estimator.Estimator."""
@@ -484,7 +490,7 @@ def model_fn(features, labels, mode, hparams):
   del labels
 
   is_training = (mode == tf.estimator.ModeKeys.TRAIN)
-  t = Transformer(vw, vh, FLAGS.dset)
+  t = Transformer(vw, vh, FLAGS.local_data_path)
 
   def func1(x):
     return tf.transpose(tf.reshape(features[x], [-1, 4, 4]), [0, 2, 1])
@@ -673,6 +679,10 @@ def main(argv):
   del argv
 
   hparams = _default_hparams()
+
+  # data download
+  print('Download data.')
+  mox.file.copy_parallel(src_url=FLAGS.data_url, dst_url=FLAGS.local_data_path)
 
   if FLAGS.predict:
     predict(FLAGS.input, hparams)
